@@ -1147,6 +1147,28 @@ namespace xsxml {
             return s;
         }
 
+        template<typename _T, size_t _Capacity>
+        struct fixed_stack {
+        public:
+            fixed_stack() : size_(0)
+            {
+            }
+
+            void push(const _T& val) {
+                if(size_ < _Capacity)
+                    elements_[size_++] = val;
+            }
+
+            _T pop() {
+                if (size_ > 0) return elements_[size_-- - 1];
+                return _T{};
+            }
+
+        private:
+            _T elements_[_Capacity];
+            size_t size_;
+        };
+
         char_t* parse_tree(char_t* s, unsigned int optmsk, char_t endch)
         {
             strconv_attribute_t strconv_attribute = get_strconv_attribute(optmsk);
@@ -1156,6 +1178,8 @@ namespace xsxml {
             char_t* mark = s;
             char_t* value = nullptr;
             size_t n = 0;
+
+            fixed_stack<char_t*, 1024> stk; // 4K on 32bits, 8K on 64bits
 
             while (*s != 0)
             {
@@ -1174,6 +1198,7 @@ namespace xsxml {
                         XSXML__SCANWHILE_UNROLL(XSXML__IS_CHARTYPE(ss, ct_symbol)); // Scan for a terminator.
 
                         handler->xml_start_element_cb(mark, s - mark);
+                        stk.push(mark);
 
                         XSXML__ENDSEG(); // Save char in 'ch', terminate & step over.
 
@@ -1235,17 +1260,16 @@ namespace xsxml {
                                 }
                                 else if (*s == '/')
                                 {
-                                    mark = s;
                                     ++s;
                                     if (*s == '>')
                                     {
-                                        handler->xml_end_element_cb(mark, 1);
+                                        handler->xml_end_element_cb(stk.pop(), -1);
                                         s++;
                                         break;
                                     }
                                     else if (*s == 0 && endch == '>')
                                     {
-                                        handler->xml_end_element_cb(mark, 1);
+                                        handler->xml_end_element_cb(stk.pop(), -1);
                                         break;
                                     }
                                     else XSXML__THROW_ERROR(status_bad_start_element, s);
@@ -1268,7 +1292,8 @@ namespace xsxml {
                         else if (ch == '/') // '<#.../'
                         {
                             if (!XSXML__ENDSWITH(*s, '>')) XSXML__THROW_ERROR(status_bad_start_element, s);
-
+                            
+                            stk.pop();
                             handler->xml_end_element_cb(mark, s - mark);
                             s += (*s == '>');
                         }
@@ -1291,6 +1316,7 @@ namespace xsxml {
                         while (XSXML__IS_CHARTYPE(*s, ct_symbol))
                             ++s;
 
+                        stk.pop();
                         handler->xml_end_element_cb(mark, s - mark);
 
                         XSXML__SKIPWS();
