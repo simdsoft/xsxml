@@ -799,7 +799,6 @@ namespace xsxml {
         std::function<void(char* name, size_t)> xml_start_element_cb;
         std::function<void(const char* name, size_t,
             const char* value, size_t)> xml_attr_cb;
-        std::function<void()> xml_end_attr_cb;
         std::function<void(const char* name, size_t)> xml_end_element_cb;
         std::function<void(const char* text, size_t len)> xml_text_cb;
     };
@@ -1090,8 +1089,6 @@ namespace xsxml {
                     // XSXML__PUSHNODE(node_pi);
                 }
 
-                auto name = target;
-
                 XSXML__ENDSEG();
 
                 // parse value/attributes
@@ -1155,11 +1152,10 @@ namespace xsxml {
             strconv_attribute_t strconv_attribute = get_strconv_attribute(optmsk);
             strconv_pcdata_t strconv_pcdata = get_strconv_pcdata(optmsk);
 
-            std::string symbol_check; // TODO: need store the cursor
-
             char_t ch = 0;
-            // xml_node_struct* cursor = nullptr;
             char_t* mark = s;
+            char_t* value = nullptr;
+            size_t n = 0;
 
             while (*s != 0)
             {
@@ -1173,20 +1169,17 @@ namespace xsxml {
                         // SAX3: TODO: xmlStartElement.
                         // XSXML__PUSHNODE(node_element); // Append a new node to the tree.
 
-                        char* name = s;
+                        mark = s;
 
                         XSXML__SCANWHILE_UNROLL(XSXML__IS_CHARTYPE(ss, ct_symbol)); // Scan for a terminator.
 
-                        auto name_size = s - name;
-
-                        handler->xml_start_element_cb(name, name_size);
+                        handler->xml_start_element_cb(mark, s - mark);
 
                         XSXML__ENDSEG(); // Save char in 'ch', terminate & step over.
-                        // handler->xmlSAX3StartElement(name);
 
                         if (ch == '>')
                         {
-                            // end of tag
+                            ; // end of tag
                         }
                         else if (XSXML__IS_CHARTYPE(ch, ct_space))
                         {
@@ -1201,10 +1194,10 @@ namespace xsxml {
                                     //xml_attribute_struct* a = append_new_attribute(cursor, alloc); // Make space for this attribute.
                                     //if (!a) XSXML__THROW_ERROR(status_out_of_memory, s);
 
-                                    auto attr_name = s; // Save the offset.
+                                    mark = s; // Save the offset.
 
                                     XSXML__SCANWHILE_UNROLL(XSXML__IS_CHARTYPE(ss, ct_symbol)); // Scan for a terminator.
-                                    auto attr_name_size = s - attr_name;
+                                    n = s - mark;
                                     XSXML__ENDSEG(); // Save char in 'ch', terminate & step over.
 
                                     if (XSXML__IS_CHARTYPE(ch, ct_space))
@@ -1223,18 +1216,18 @@ namespace xsxml {
                                         {
                                             ch = *s; // Save quote char to avoid breaking on "''" -or- '""'.
                                             ++s; // Step over the quote.
-                                            auto attr_value = s;// a->value = s; // Save the offset.
+                                            value = s;// a->value = s; // Save the offset.
 
                                             s = strconv_attribute(s, ch);
 
                                             if (!s)
-                                                XSXML__THROW_ERROR(status_bad_attribute, attr_value);
+                                                XSXML__THROW_ERROR(status_bad_attribute, value);
 
                                             // After this line the loop continues from the start;
                                             // Whitespaces, / and > are ok, symbols and EOF are wrong,
                                             // everything else will be detected
                                             if (XSXML__IS_CHARTYPE(*s, ct_start_symbol)) XSXML__THROW_ERROR(status_bad_attribute, s);
-                                            handler->xml_attr_cb(attr_name, attr_name_size, attr_value, s - attr_value - 1);
+                                            handler->xml_attr_cb(mark, n, value, s - value - 1);
                                         }
                                         else XSXML__THROW_ERROR(status_bad_attribute, s);
                                     }
@@ -1242,23 +1235,17 @@ namespace xsxml {
                                 }
                                 else if (*s == '/')
                                 {
+                                    mark = s;
                                     ++s;
-
                                     if (*s == '>')
                                     {
-                                        // SAX3: endElement
-                                        // XSXML__POPNODE();
-                                        handler->xml_end_attr_cb();
-                                        handler->xml_end_element_cb(name, name_size);
+                                        handler->xml_end_element_cb(mark, 1);
                                         s++;
                                         break;
                                     }
                                     else if (*s == 0 && endch == '>')
                                     {
-                                        // SAX3: endElement
-                                        // XSXML__POPNODE();
-                                        handler->xml_end_attr_cb();
-                                        handler->xml_end_element_cb(name, name_size);
+                                        handler->xml_end_element_cb(mark, 1);
                                         break;
                                     }
                                     else XSXML__THROW_ERROR(status_bad_start_element, s);
@@ -1277,16 +1264,12 @@ namespace xsxml {
                             }
 
                             // !!!
-                            handler->xml_end_attr_cb();
-                            // handler->xmlSAX3EndElement(name, name_size);
                         }
                         else if (ch == '/') // '<#.../'
                         {
                             if (!XSXML__ENDSWITH(*s, '>')) XSXML__THROW_ERROR(status_bad_start_element, s);
 
-                            // SAX3: TODO
-                            // XSXML__POPNODE(); // Pop.
-                            handler->xml_end_element_cb(name, name_size);
+                            handler->xml_end_element_cb(mark, s - mark);
                             s += (*s == '>');
                         }
                         else if (ch == 0)
@@ -1302,41 +1285,23 @@ namespace xsxml {
                     {
                         ++s;
 
-                        // SAX3: TODO
-                        char_t* name = s;// cursor->name;
-                        if (!name) XSXML__THROW_ERROR(status_end_element_mismatch, s);
+                        mark = s;
 
-#if 0 // disable check
+                        // SAX3, we don't check end element name
                         while (XSXML__IS_CHARTYPE(*s, ct_symbol))
-                        {
-                            if (*s++ != *name++) XSXML__THROW_ERROR(status_end_element_mismatch, s);
-                        }
+                            ++s;
 
-                        if (*name)
-                        {
-                            if (*s == 0 && name[0] == endch && name[1] == 0) XSXML__THROW_ERROR(status_bad_end_element, s);
-                            else XSXML__THROW_ERROR(status_end_element_mismatch, s);
-                        }
-#endif
-                        // SAX3: TODO
-                        // XSXML__POPNODE(); // Pop.
-
-                        while (XSXML__IS_CHARTYPE(*s, ct_symbol))
-                        {
-                            ++s;// if (*s++ != *name++) XSXML__THROW_ERROR(status_end_element_mismatch, s);
-                        }
+                        handler->xml_end_element_cb(mark, s - mark);
 
                         XSXML__SKIPWS();
 
                         if (*s == 0)
                         {
                             if (endch != '>') XSXML__THROW_ERROR(status_bad_end_element, s);
-                            handler->xml_end_element_cb(name, s - name);
                         }
                         else
                         {
                             if (*s != '>') XSXML__THROW_ERROR(status_bad_end_element, s);
-                            handler->xml_end_element_cb(name, s - name);
                             ++s;
                         }
                     }
@@ -1348,7 +1313,7 @@ namespace xsxml {
 
                         //assert(cursor);
                         //if (XSXML__NODETYPE(cursor) == node_declaration) goto LOC_ATTRIBUTES;
-                        // goto LOC_ATTRIBUTES; // TODO: check, always regard as a valid node_declaration
+                        // goto LOC_ATTRIBUTES; // SAX3: always regard as a valid node_declaration
                     }
                     else if (*s == '!') // '<!...'
                     {
@@ -1384,17 +1349,15 @@ namespace xsxml {
                     if (!XSXML__OPTSET(parse_trim_pcdata))
                         s = mark;
 
-                    // SAX3: 
+                    // SAX3: Ignore node_pcdata.
                     if (/*cursor->parent ||*/ XSXML__OPTSET(parse_fragment))
                     { // Currently, SAX3 simplely skip, do not regard text it node
-                        // SAX3: 
                         if (XSXML__OPTSET(parse_embed_pcdata) /*&& cursor->parent && !cursor->first_child && !cursor->value*/)
                         {
                             // cursor->value = s; // Save the offset.
                         }
                         else
                         {
-                            // SAX3: Ignore node_pcdata.
                             // XSXML__PUSHNODE(node_pcdata); // Append a new node on the tree.
 
                             // cursor->value = s; // Save the offset.
@@ -1411,7 +1374,6 @@ namespace xsxml {
                         XSXML__SCANFOR(*s == '<'); // '...<'
                         if (!*s) break;
 
-                        symbol_check.assign(mark, s - mark);
                         handler->xml_text_cb(mark, s - mark);
 
                         ++s;
@@ -1475,14 +1437,6 @@ namespace xsxml {
                 // since we removed last character, we have to handle the only possible false positive (stray <)
                 if (endch == '<')
                     return make_parse_result(status_unrecognized_tag, length - 1);
-
-                // check if there are any element nodes parsed
-#if 0 // SAX3: TODO: check parse error condition.
-                xml_node_struct* first_root_child_parsed = last_root_child ? last_root_child->next_sibling + 0 : root->first_child + 0;
-
-                if (!XSXML__OPTSET(parse_fragment) && !has_element_node_siblings(first_root_child_parsed))
-                    return make_parse_result(status_no_document_element, length - 1);
-#endif
             }
             else
             {
