@@ -244,9 +244,9 @@ public:
   virtual const char* what() const throw() { return m_what; }
 
   //! Gets pointer to character data where error happened.
-  //! char_t should be the same as char type of xml_document that produced the error.
+  //! _CharT should be the same as char type of xml_document that produced the error.
   //! \return Pointer to location within the parsed string where error occured.
-  template <class char_t> char_t* where() const { return reinterpret_cast<char_t*>(m_where); }
+  template <class _CharT> _CharT* where() const { return reinterpret_cast<_CharT*>(m_where); }
 
 private:
   const char* m_what;
