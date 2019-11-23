@@ -6,11 +6,11 @@ The embedded xml SAX parser, extract from pugixml DOM parser: https://github.com
 ```cpp
 ///////////////////////////////////////////////////////////////////////////
 // Implement XML SAX2 handler with SAX3 handler
-class xml_sax2_handler
+class xmlSAX2Handler
 {
     xsxml::xml_sax3_parse_cb sax3_handler_;
 public:
-    xml_sax2_handler() { 
+    xmlSAX2Handler() { 
         sax3_handler_.xml_start_element_cb = [=](char* name, size_t size) {
             elementName.first = name;
             elementName.second = size;
