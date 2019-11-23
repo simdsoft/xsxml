@@ -1,6 +1,7 @@
 # xsxml
 
-The embedded xml SAX parser, extract from pugixml DOM parser: https://github.com/zeux/pugixml
+The embedded xml SAX parser, extract from rapidxml DOM parser: https://github.com/dwd/rapidxml  
+The non-recursive edition is extract from pugixml DOM parser: https://github.com/zeux/pugixml
 
 ## SAX2 handler
 ```cpp
