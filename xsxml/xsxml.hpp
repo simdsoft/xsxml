@@ -969,23 +969,27 @@ private:
     if (n == 0)
       XSXML__PARSE_ERROR("expected element name", text);
 
-    handler_->xml_start_element_cb(mark, n);
-
     // Skip whitespace between element name and attributes or >
     skip<whitespace_pred, Flags>(text);
 
     // Parse attributes, if any
     parse_node_attributes<Flags>(text);
 
+    // Notify start element and end attr
+    auto chTmp = *text;
+    // Place zero terminator after name
+    if (!(Flags & parse_no_string_terminators))
+      mark[n] = (char_t)'\0';
+    handler_->xml_start_element_cb(mark, n);
     handler_->xml_end_attr_cb();
 
     // Determine ending type
-    if (*text == char_t('>'))
+    if (chTmp == char_t('>'))
     {
       ++text;
       parse_node_contents<Flags>(text, mark, n);
     }
-    else if (*text == char_t('/'))
+    else if (chTmp == char_t('/'))
     {
       ++text;
       if (*text != char_t('>'))
@@ -999,14 +1003,12 @@ private:
     }
     else
     {
-      parse_result_ = parse_result::expected_close_tag;
-      if (*text != 0)
+      if (chTmp != 0)
+      {
+        parse_result_ = parse_result::expected_close_tag;
         XSXML__PARSE_ERROR("expected >", text);
+      } // else, parse to eof
     }
-
-    // Place zero terminator after name
-    if (!(Flags & parse_no_string_terminators))
-      mark[n] = (char_t)'\0';
 
     // Return parsed element
     handler_->xml_end_element_cb(mark, n);
