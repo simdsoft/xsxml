@@ -161,13 +161,27 @@ static const int parse_full = parse_declaration_node | parse_comment_nodes | par
 static const int parse_normal = parse_no_data_nodes;
 
 typedef char char_t;
-typedef std::pair<char*, size_t> string_view;
+
+class string_view
+{
+public:
+  string_view() : _Mystr(nullptr), _Mysize(0) {}
+  string_view(char_t* str, size_t size) : _Mystr(str), _Mysize(size) {}
+  const char* c_str() const { return _Mystr != nullptr ? _Mystr : ""; }
+  size_t length() const { return _Mysize; }
+  bool empty() const { return _Mysize == 0; }
+
+private:
+  char_t* _Mystr;
+  size_t _Mysize;
+};
 
 // The sax3 parse callbacks
 struct xml_sax3_parse_cb
 {
   std::function<void(char* name, size_t)> xml_start_element_cb;
   std::function<void(const char* name, size_t, const char* value, size_t)> xml_attr_cb;
+  std::function<void()> xml_end_attr_cb;
   std::function<void(const char* name, size_t)> xml_end_element_cb;
   std::function<void(const char* text, size_t len)> xml_text_cb;
 };
@@ -728,9 +742,6 @@ private:
       return;    // return 0;      // Do not produce comment node
     }
 
-    // Remember value start
-    char_t* value = text;
-
     // Skip until end of comment
     while (text[0] != char_t('-') || text[1] != char_t('-') || text[2] != char_t('>'))
     {
@@ -754,9 +765,6 @@ private:
   // Parse DOCTYPE
   template <int Flags> void parse_doctype(char_t*& text)
   {
-    // Remember value start
-    char_t* value = text;
-
     // Skip to >
     while (*text != char_t('>'))
     {
@@ -836,9 +844,6 @@ private:
       // Skip whitespace between pi target and pi
       skip<whitespace_pred, Flags>(text);
 
-      // Remember start of pi
-      char_t* value = text;
-
       // Skip to '?>'
       while (text[0] != char_t('?') || text[1] != char_t('>'))
       {
@@ -846,18 +851,6 @@ private:
           XSXML__PARSE_ERROR("unexpected end of data", text);
         ++text;
       }
-
-#if 0 // SAX3: DNT notify for pi
-      // Set pi value (verbatim, no entity expansion or whitespace normalization)
-                pi->value(value, text - value);
-
-                // Place zero terminator after name and value
-                if (!(Flags & parse_no_string_terminators))
-                {
-                    pi->name()[pi->name_size()] = char_t('\0');
-                    pi->value()[pi->value_size()] = char_t('\0');
-                }
-#endif
 
       text += 2; // Skip '?>'
       return;    // return pi;
@@ -970,13 +963,13 @@ private:
     // xml_node<char_t> *element = this->allocate_node(node_element);
 
     // Extract element name
-    string_view elementName(text, 0);
+    auto mark = text;
     skip<node_name_pred, Flags>(text);
-    elementName.second = text - elementName.first;
-    if (0 == elementName.second)
+    size_t n = text - mark;
+    if (n == 0)
       XSXML__PARSE_ERROR("expected element name", text);
 
-    handler_->xml_start_element_cb(elementName.first, elementName.second);
+    handler_->xml_start_element_cb(mark, n);
 
     // Skip whitespace between element name and attributes or >
     skip<whitespace_pred, Flags>(text);
@@ -984,11 +977,13 @@ private:
     // Parse attributes, if any
     parse_node_attributes<Flags>(text);
 
+    handler_->xml_end_attr_cb();
+
     // Determine ending type
     if (*text == char_t('>'))
     {
       ++text;
-      parse_node_contents<Flags>(text, elementName);
+      parse_node_contents<Flags>(text, mark, n);
     }
     else if (*text == char_t('/'))
     {
@@ -1011,12 +1006,10 @@ private:
 
     // Place zero terminator after name
     if (!(Flags & parse_no_string_terminators))
-    {
-      elementName.first[elementName.second] = (char_t)'\0';
-    }
+      mark[n] = (char_t)'\0';
 
     // Return parsed element
-    handler_->xml_end_element_cb(elementName.first, elementName.second);
+    handler_->xml_end_element_cb(mark, n);
     // return element;
   }
 
@@ -1107,8 +1100,7 @@ private:
   }
 
   // Parse contents of the node - children, data etc.
-  template <int Flags>
-  void parse_node_contents(char_t*& text, const string_view& elementName /*element name*/)
+  template <int Flags> void parse_node_contents(char_t*& text, const char_t* mark, size_t n)
   {
     // For all children and text
     while (1)
@@ -1139,15 +1131,12 @@ private:
               // Skip and validate closing tag name
               char_t* closing_name = text;
               skip<node_name_pred, Flags>(text);
-              if (!internal::compare(elementName.first, elementName.second, closing_name,
-                                     text - closing_name, true))
+              if (!internal::compare(mark, n, closing_name, text - closing_name, true))
                 XSXML__PARSE_ERROR("invalid closing tag name", text);
             }
             else
-            {
-              // No validation, just skip name
-              skip<node_name_pred, Flags>(text);
-            }
+              skip<node_name_pred, Flags>(text); // No validation, just skip name
+
             // Skip remaining whitespace after node name
             skip<whitespace_pred, Flags>(text);
             if (*text != char_t('>'))
