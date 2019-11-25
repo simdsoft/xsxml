@@ -143,6 +143,10 @@ const unsigned int parse_default = parse_cdata | parse_escapes | parse_wconv_att
 const unsigned int parse_full =
     parse_default | parse_pi | parse_comments | parse_declaration | parse_doctype;
 
+// The max parse deep of xml
+// Don't define it to large, otherwise, will lead stack overflow
+const unsigned int parse_max_deep = 512;
+
 typedef char_t* (*strconv_attribute_t)(char_t*, char_t);
 typedef char_t* (*strconv_pcdata_t)(char_t*);
 
@@ -916,11 +920,27 @@ static char_t* parse_skip_bom(char_t* s)
   return (s[0] == '\xef' && s[1] == '\xbb' && s[2] == '\xbf') ? s + 3 : s;
 }
 
+// Simple string view
+class string_view
+{
+public:
+  string_view() : _Mystr(nullptr), _Mysize(0) {}
+  string_view(char_t* str, size_t size) : _Mystr(str), _Mysize(size) {}
+  const char* c_str() const { return _Mystr != nullptr ? _Mystr : ""; }
+  size_t length() const { return _Mysize; }
+  bool empty() const { return _Mysize == 0; }
+
+private:
+  char_t* _Mystr;
+  size_t _Mysize;
+};
+
 // The sax3 parse callbacks
 struct xml_sax3_parse_cb
 {
   std::function<void(char* name, size_t)> xml_start_element_cb;
   std::function<void(const char* name, size_t, const char* value, size_t)> xml_attr_cb;
+  std::function<void()> xml_end_attr_cb;
   std::function<void(const char* name, size_t)> xml_end_element_cb;
   std::function<void(const char* text, size_t len)> xml_text_cb;
 };
@@ -1330,7 +1350,7 @@ struct xml_sax3_parser
     char_t* value = nullptr;
     size_t n      = 0;
 
-    fixed_stack<char_t*, 1024> stk; // 4K on 32bits, 8K on 64bits
+    fixed_stack<string_view, parse_max_deep> stk; // 4K on 32bits, 6K on 64bits
 
     while (*s != 0)
     {
@@ -1349,17 +1369,16 @@ struct xml_sax3_parser
           XSXML__SCANWHILE_UNROLL(XSXML__IS_CHARTYPE(ss, ct_symbol)); // Scan for a terminator.
 
           handler->xml_start_element_cb(mark, s - mark);
-          stk.push(mark);
+          stk.push(::xsxml::string_view(mark, s - mark));
 
           XSXML__ENDSEG(); // Save char in 'ch', terminate & step over.
 
           if (ch == '>')
           {
-            ; // end of tag
+            handler->xml_end_attr_cb(); // end of tag
           }
           else if (XSXML__IS_CHARTYPE(ch, ct_space))
           {
-          LOC_ATTRIBUTES:
             while (true)
             {                  // parse attributes
               XSXML__SKIPWS(); // Eat any whitespace.
@@ -1418,13 +1437,17 @@ struct xml_sax3_parser
                 ++s;
                 if (*s == '>')
                 {
-                  handler->xml_end_element_cb(stk.pop(), -1);
-                  s++;
+                  auto ele_name = stk.pop();
+                  handler->xml_end_attr_cb();
+                  handler->xml_end_element_cb(ele_name.c_str(), ele_name.length());
+                  ++s;
                   break;
                 }
                 else if (*s == 0 && endch == '>')
                 {
-                  handler->xml_end_element_cb(stk.pop(), -1);
+                  auto ele_name = stk.pop();
+                  handler->xml_end_attr_cb();
+                  handler->xml_end_element_cb(ele_name.c_str(), ele_name.length());
                   break;
                 }
                 else
@@ -1433,7 +1456,7 @@ struct xml_sax3_parser
               else if (*s == '>')
               {
                 ++s;
-
+                handler->xml_end_attr_cb();
                 break;
               }
               else if (*s == 0 && endch == '>')
