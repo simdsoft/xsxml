@@ -319,8 +319,7 @@ public:
     parse_bom(text);
 
     // Parse children
-  _L_Loop:
-  {
+  _L_Loop : {
     // Skip whitespace before node
     skip<whitespace_pred, Flags>(text);
     if (*text == 0)
@@ -775,8 +774,7 @@ private:
 
           // If '[' encountered, scan for matching ending ']' using naive algorithm with depth
           // This works for all W3C test files except for 2 most wicked
-        case char_t('['):
-        {
+        case char_t('['): {
           ++text; // Skip '['
           int depth = 1;
           while (depth > 0)
@@ -983,7 +981,7 @@ private:
     handler_->xml_start_element_cb(mark, n); // <abc>
 
     // Parse attributes, if any
-    if (chTmp != '>' || chTmp == char_t('/'))
+    if (chTmp != '>' && chTmp != char_t('/'))
     {
       parse_node_attributes<Flags>(text);
       chTmp = *text;
