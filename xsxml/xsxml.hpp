@@ -940,7 +940,6 @@ private:
     }
 
     // Skip until end of cdata
-    char_t* value = text;
     while (text[0] != char_t(']') || text[1] != char_t(']') || text[2] != char_t('>'))
     {
       if (!text[0])
