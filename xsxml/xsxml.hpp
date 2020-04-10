@@ -127,6 +127,12 @@ static const int parse_trim_whitespace = 0x400;
 //! See xml_document::parse() function.
 static const int parse_normalize_whitespace = 0x800;
 
+//! Parse flag instructing the parser to convert html entity
+//! this flag only works when the flag 'parse_no_entity_translation' not specified
+//! <br><br>
+//! See xml_document::parse() function.
+static const int parse_html_entity_translation = 0x1000;
+
 // Compound flags
 
 //! Parse flags which represent default behaviour of the parser.
@@ -638,6 +644,35 @@ private:
 
               // Something else
             default:
+              if (Flags & parse_html_entity_translation)
+              {
+                switch (src[1])
+                { // &nbsp;
+                  case char_t('n'):
+                    if (src[2] == char_t('b') && src[3] == char_t('s') && src[4] == char_t('p') &&
+                        src[5] == char_t(';'))
+                    {
+                      *dest = char_t(' ');
+                      ++dest;
+                      src += 6;
+                      continue;
+                    }
+                    break;
+                    // &emsp;
+                  case char_t('e'):
+                    if (src[2] == char_t('m') && src[3] == char_t('s') && src[4] == char_t('p') &&
+                        src[5] == char_t(';'))
+                    {
+                      *dest = char_t(' ');
+                      ++dest;
+                      *dest = char_t(' ');
+                      ++dest;
+                      src += 6;
+                      continue;
+                    }
+                    break;
+                }
+              }
               // Ignore, just copy '&' verbatim
               break;
           }
