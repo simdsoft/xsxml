@@ -377,87 +377,6 @@ struct gap
   }
 };
 
-template <typename opt_trim, typename opt_eol, typename opt_escape> struct strconv_pcdata_impl
-{
-  static char_t* parse(char_t* s)
-  {
-    gap g;
-
-    char_t* begin = s;
-
-    while (true)
-    {
-      XSXML__SCANWHILE_UNROLL(!XSXML__IS_CHARTYPE(ss, ct_parse_pcdata));
-
-      if (*s == '<') // PCDATA ends here
-      {
-        char_t* end = g.flush(s);
-
-        if (opt_trim::value)
-          while (end > begin && XSXML__IS_CHARTYPE(end[-1], ct_space))
-            --end;
-
-        *end = 0;
-
-        return s + 1;
-      }
-      else if (opt_eol::value && *s == '\r') // Either a single 0x0d or 0x0d 0x0a pair
-      {
-        *s++ = '\n'; // replace first one with 0x0a
-
-        if (*s == '\n')
-          g.push(s, 1);
-      }
-      else if (opt_escape::value && *s == '&')
-      {
-        s = strconv_escape(s, g);
-      }
-      else if (*s == 0)
-      {
-        char_t* end = g.flush(s);
-
-        if (opt_trim::value)
-          while (end > begin && XSXML__IS_CHARTYPE(end[-1], ct_space))
-            --end;
-
-        *end = 0;
-
-        return s;
-      }
-      else
-        ++s;
-    }
-  }
-};
-
-XSXML__DECL strconv_pcdata_t get_strconv_pcdata(unsigned int optmask)
-{
-  XSXML__STATIC_ASSERT(parse_escapes == 0x10 && parse_eol == 0x20 && parse_trim_pcdata == 0x0800);
-
-  switch (((optmask >> 4) & 3) | ((optmask >> 9) & 4)) // get bitmask for flags (eol escapes trim)
-  {
-    case 0:
-      return strconv_pcdata_impl<opt_false, opt_false, opt_false>::parse;
-    case 1:
-      return strconv_pcdata_impl<opt_false, opt_false, opt_true>::parse;
-    case 2:
-      return strconv_pcdata_impl<opt_false, opt_true, opt_false>::parse;
-    case 3:
-      return strconv_pcdata_impl<opt_false, opt_true, opt_true>::parse;
-    case 4:
-      return strconv_pcdata_impl<opt_true, opt_false, opt_false>::parse;
-    case 5:
-      return strconv_pcdata_impl<opt_true, opt_false, opt_true>::parse;
-    case 6:
-      return strconv_pcdata_impl<opt_true, opt_true, opt_false>::parse;
-    case 7:
-      return strconv_pcdata_impl<opt_true, opt_true, opt_true>::parse;
-    default:
-      assert(false);
-      return 0; // should not get here
-  }
-}
-
 struct utf8_writer
 {
   typedef uint8_t* value_type;
@@ -639,6 +558,87 @@ XSXML__DECL char_t* strconv_escape(char_t* s, gap& g)
   }
 
   return stre;
+}
+
+template <typename opt_trim, typename opt_eol, typename opt_escape> struct strconv_pcdata_impl
+{
+  static char_t* parse(char_t* s)
+  {
+    gap g;
+
+    char_t* begin = s;
+
+    while (true)
+    {
+      XSXML__SCANWHILE_UNROLL(!XSXML__IS_CHARTYPE(ss, ct_parse_pcdata));
+
+      if (*s == '<') // PCDATA ends here
+      {
+        char_t* end = g.flush(s);
+
+        if (opt_trim::value)
+          while (end > begin && XSXML__IS_CHARTYPE(end[-1], ct_space))
+            --end;
+
+        *end = 0;
+
+        return s + 1;
+      }
+      else if (opt_eol::value && *s == '\r') // Either a single 0x0d or 0x0d 0x0a pair
+      {
+        *s++ = '\n'; // replace first one with 0x0a
+
+        if (*s == '\n')
+          g.push(s, 1);
+      }
+      else if (opt_escape::value && *s == '&')
+      {
+        s = strconv_escape(s, g);
+      }
+      else if (*s == 0)
+      {
+        char_t* end = g.flush(s);
+
+        if (opt_trim::value)
+          while (end > begin && XSXML__IS_CHARTYPE(end[-1], ct_space))
+            --end;
+
+        *end = 0;
+
+        return s;
+      }
+      else
+        ++s;
+    }
+  }
+};
+
+XSXML__DECL strconv_pcdata_t get_strconv_pcdata(unsigned int optmask)
+{
+  XSXML__STATIC_ASSERT(parse_escapes == 0x10 && parse_eol == 0x20 && parse_trim_pcdata == 0x0800);
+
+  switch (((optmask >> 4) & 3) | ((optmask >> 9) & 4)) // get bitmask for flags (eol escapes trim)
+  {
+    case 0:
+      return strconv_pcdata_impl<opt_false, opt_false, opt_false>::parse;
+    case 1:
+      return strconv_pcdata_impl<opt_false, opt_false, opt_true>::parse;
+    case 2:
+      return strconv_pcdata_impl<opt_false, opt_true, opt_false>::parse;
+    case 3:
+      return strconv_pcdata_impl<opt_false, opt_true, opt_true>::parse;
+    case 4:
+      return strconv_pcdata_impl<opt_true, opt_false, opt_false>::parse;
+    case 5:
+      return strconv_pcdata_impl<opt_true, opt_false, opt_true>::parse;
+    case 6:
+      return strconv_pcdata_impl<opt_true, opt_true, opt_false>::parse;
+    case 7:
+      return strconv_pcdata_impl<opt_true, opt_true, opt_true>::parse;
+    default:
+      assert(false);
+      return 0; // should not get here
+  }
 }
 
 template <typename opt_escape> struct strconv_attribute_impl
